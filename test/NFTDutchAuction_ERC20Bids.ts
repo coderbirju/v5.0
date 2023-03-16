@@ -2,15 +2,18 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from 'chai';
 import { ethers, upgrades } from 'hardhat';
 // import { upgrades } from '@openzeppelin/hardhat-upgrades';
-import { Contract, Signer, utils } from 'ethers';
+import { ERC20Permit, HuskyCoin } from '../typechain-types';
+import { splitSignature } from 'ethers/lib/utils'
+import { Contract, Signer, BigNumberish, constants, Signature, Wallet } from 'ethers';
 
 describe('Test Dutch Auction Contract', function () {
     let contract: Contract;
     let newContract: Contract;
     let nftContract: Contract;
-    let huskyCoin: Contract;
+    let huskyCoin: HuskyCoin;
     let owner: Signer;
     let nftOwner: Signer;
+    const deadline = ethers.constants.MaxUint256;
 
   async function deployContracts() {
     const RESERVE_PRICE = 1000;
@@ -52,6 +55,75 @@ describe('Test Dutch Auction Contract', function () {
     const NewContract = await ethers.getContractFactory('NFTDutchAuction_ERC20Bids_v2');
     newContract = await upgrades.upgradeProxy(contract.address, NewContract, {call: {fn: 'reInitialize'}});
   }
+
+
+  async function getPermitSignature(
+    wallet: Wallet,
+    token: ERC20Permit,
+    spender: string,
+    value: BigNumberish = constants.MaxUint256,
+    deadline = constants.MaxUint256
+  ): Promise<Signature> {
+    const [nonce, name, version, chainId] = await Promise.all([
+      token.nonces(wallet.address),
+      token.name(),
+      '1',
+      wallet.getChainId(),
+    ])
+  
+    return splitSignature(
+      await wallet._signTypedData(
+        {
+          name,
+          version,
+          chainId,
+          verifyingContract: token.address,
+        },
+        {
+          Permit: [
+            {
+              name: 'owner',
+              type: 'address',
+            },
+            {
+              name: 'spender',
+              type: 'address',
+            },
+            {
+              name: 'value',
+              type: 'uint256',
+            },
+            {
+              name: 'nonce',
+              type: 'uint256',
+            },
+            {
+              name: 'deadline',
+              type: 'uint256',
+            },
+          ],
+        },
+        {
+          owner: wallet.address,
+          spender,
+          value,
+          nonce,
+          deadline,
+        }
+      )
+    )
+  }
+
+  async function generateRandomWallet(): Promise<Wallet> {
+    // Connect to Hardhat Provider
+    const wallet = Wallet.createRandom().connect(ethers.provider);
+    // Set balance
+    await ethers.provider.send("hardhat_setBalance", [
+        wallet.address,
+        "0x56BC75E2D6310000000", // 100 ETH
+    ]);
+    return wallet;
+ }
 
   describe('Working of the NFTDutchAuction', () => {
     
@@ -201,7 +273,7 @@ describe('Test Dutch Auction Contract', function () {
     it('should have the getNft function', async () => {
       await deployUpgradedContracts();
       let [nftAddress, nftId] = await newContract.getNft();
-      console.log('nftId: ', nftId);
+      // console.log('nftId: ', nftId);
       expect(nftAddress).to.equal(nftContract.address);
       // console.log('nftContract: ', nftContract.address);
       // console.log('nftAddress: ', nftAddress);
@@ -212,6 +284,20 @@ describe('Test Dutch Auction Contract', function () {
       await deployUpgradedContracts();
       let reservePrice = await newContract.getReservePrice();
       expect(reservePrice).to.equal(1000);
+    });
+
+    it('should be able to bid without approval', async () => {
+      await deployUpgradedContracts();
+      let randomWallet = await generateRandomWallet(); 
+      // console.log('huskyCoin: ', huskyCoin);
+      const currentAllowance = await huskyCoin.allowance(randomWallet.address, newContract.address);
+      // console.log('currentAllowance: ', currentAllowance);
+      await huskyCoin.connect(owner).mint(randomWallet.address, 5000);
+      // console.log(await randomWallet.getBalance());
+      const { v, r, s } = await getPermitSignature(randomWallet, huskyCoin, newContract.address, 2000, deadline);
+      // console.log('v, r, s: ', v, r, s);
+      await newContract.connect(randomWallet).bidWithPermit(2000, deadline, v, r, s);
+      expect(await newContract.winnerAddress()).to.equal(await randomWallet.getAddress());
     });
 
   });

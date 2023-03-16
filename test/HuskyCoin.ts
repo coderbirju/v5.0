@@ -44,4 +44,5 @@ describe("HuskyCoin", function() {
         await expect(huskyCoin.transfer("0x0000000000000000000000000000000000000000", BigInt(100 * 10 ** 18))).to.be.rejectedWith("ERC20: transfer to the zero address");
     });
   });
+  
 });

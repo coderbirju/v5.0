@@ -11,10 +11,12 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol" ;
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol";
+
 
 contract NFTDutchAuction_ERC20Bids is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     IERC721 public erc721TokenAddress;
-    IERC20 public erc20TokenAddress;
+    ERC20Permit public erc20TokenAddress;
     uint256 public nftTokenId;
     address payable public addressOfOwner;
     address payable public winnerAddress;
@@ -37,7 +39,7 @@ contract NFTDutchAuction_ERC20Bids is Initializable, UUPSUpgradeable, OwnableUpg
         uint256 _numBlocksAuctionOpen,
         uint256 _offerPriceDecrement
     ) public initializer {
-        erc20TokenAddress = IERC20(_erc20TokenAddress);
+        erc20TokenAddress = ERC20Permit(_erc20TokenAddress);
         erc721TokenAddress = IERC721(_erc721TokenAddress);
         nftTokenId = _nftTokenId;
         reservePrice = _reservePrice;
